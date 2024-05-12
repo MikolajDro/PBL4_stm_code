@@ -1,3 +1,13 @@
+# My add
+.bin
+.hex
+.ld
+.s
+.elf
+.list
+.map
+.launch
+
 # Prerequisites
 *.d
 
