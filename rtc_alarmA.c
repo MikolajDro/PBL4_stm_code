@@ -16,43 +16,83 @@
  * RTC Alarm section
  */
 
-uint8_t RTC_FLAG = RTC_SLEEP;		// creating a flag for rtc
-struct RTC_AlarmSet_t *AlarmsArray;	// creating a alarms first element
+uint8_t RTC_FLAG = RTC_SLEEP;				/// flag for RTC state machine
+
+// creating a alarms first element
+//struct RTC_AlarmSet_t *AlarmsArray;			/// main pointer
+static struct RTC_AlarmSet_t CurrentAlarm;	/// value for functions
+
 
 /**
+ *	Initialize RTC with necessary configuration
+ *	+ set testing values
  *
- * @param hrtc			rtc handler
+ * @param hrtc			RTC handler
  * @param AlarmsArray	one-way list of alarms
  * @return 		successful status
  */
-int RTC_Init(RTC_HandleTypeDef *hrtc, struct RTC_AlarmSet_t *AlarmsArray)
+int 
+RTC_Init(RTC_HandleTypeDef *hrtc, struct RTC_AlarmSet_t *AlarmsArray)
 {
-	if((AlarmsArray = (struct RTC_AlarmSet_t *) \
-			malloc(sizeof(struct RTC_AlarmSet_t))) == NULL)
+	//TODO: RTC init from cube mx
+
+
+	// Only for testing purpose
+	struct RTC_AlarmSet_t *NewAlarm;
+
+	if((NewAlarm = (struct RTC_AlarmSet_t *) \
+				malloc(sizeof(struct RTC_AlarmSet_t))) == NULL)
 	{
 		return MEMORY_ALLOCATION_ERROR;
 	}
-	// Only for testing purpose
+	NewAlarm->seconds 	= 5;
+	NewAlarm->minutes 	= 0;
+	NewAlarm->hours 	= 0;
+	NewAlarm->days 		= 1;
+	NewAlarm->months 	= 1;
+	NewAlarm->years 	= 0;
+	NewAlarm->NextAlarm = NULL;
 
-	AlarmsArray->years		= 0;
-	AlarmsArray->months		= 1;
-	AlarmsArray->days 		= 1;
-	AlarmsArray->hours		= 0;
-	AlarmsArray->minutes	= 0;
-	AlarmsArray->seconds	= 5;
-	AlarmsArray->NextAlarm  = AlarmsArray;
+	AlarmsArray = NewAlarm;
 
 	return RTC_OK;
 }
 
+
 /**
+ * @fn int RTC_is_alarmArray_limit(struct RTC_AlarmSet_t*)
+ * @param AlarmsArray
+ * @return size of AlarmArray
+ */
+int
+RTC_is_alarmArray_limit(struct RTC_AlarmSet_t *AlarmsArray)
+{
+	uint16_t sizeCounter = 0;
+	RTC_AlarmSet_t *currAlarm = AlarmsArray;
+	
+	do
+	{
+		currAlarm = currAlarm->NextAlarm;
+		sizeCounter++;
+	}
+	while(currAlarm != NULL);
+	
+	if(sizeCounter == 0)
+		return MISSING_ALARM;
+	
+	return sizeCounter;
+}
+
+/**
+ *	Convert string to integer
  *
  * @param str	table of chars
  * @param start start position
  * @param end 	end position
- * @return		successful status
+ * @return		Integer from string
  */
-uint8_t strtoi(const uint8_t *str, uint16_t start, uint16_t end) {
+int
+strtoi(const uint8_t *str, uint16_t start, uint16_t end) {
     int result = 0;
     int sign = 1;
     int i = start;
@@ -74,7 +114,15 @@ uint8_t strtoi(const uint8_t *str, uint16_t start, uint16_t end) {
 
     return sign * result;
 }
-struct RTC_AlarmSet_t RTC_ParseMessage_NewAlarm(const uint8_t *Message)
+
+
+/**
+ * @fn struct RTC_AlarmSet_t RTC_parseMessage_NewAlarm(const uint8_t*)
+ * @param Message
+ * @return
+ */
+struct RTC_AlarmSet_t 
+RTC_parseMessage_NewAlarm(const uint8_t *Message)
 {
 	// "AT+NEWAL=SSMMHHDDMMYY" -> 20B
 	// SS -> seconds 	Position 8, 9
@@ -117,18 +165,104 @@ struct RTC_AlarmSet_t RTC_ParseMessage_NewAlarm(const uint8_t *Message)
 	}
 	parsedData.NextAlarm	= NULL;
 
-	//TODO auto-checking macro or function to prevent bad time values
-
 	return parsedData;
 }
 
 /**
- *
+ * @fn int RTC_is_alarm_later(struct RTC_AlarmSet_t*, struct RTC_AlarmSet_t*)
+ * @param NewAlarm
+ * @param CurrAlarm
+ * @return LATER if CurrAlarm is later than NewAlarm
+ * 			EARLIER if CurrAlarm is earlier than NewAlarm
+ */
+int
+RTC_is_alarm_later(struct RTC_AlarmSet_t *NewAlarm, struct RTC_AlarmSet_t *CurrAlarm)
+{
+	if(NewAlarm->years > CurrAlarm->years){
+		;
+	}else{
+		if(NewAlarm->months > CurrAlarm->months)
+		{
+			;
+		}else{
+			if(NewAlarm->days > CurrAlarm->days)
+			{
+				;
+			}else{
+				if(NewAlarm->hours > CurrAlarm->hours)
+				{
+					;
+				}else{
+					if(NewAlarm->hours > CurrAlarm->hours)
+					{
+						;
+					}else{
+						if(NewAlarm->minutes > CurrAlarm->minutes)
+						{
+							;
+						}else{
+							if(NewAlarm->seconds > CurrAlarm->seconds)
+							{
+								;
+							}
+							else{
+								return LATER;
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	return EARLIER;
+}
+
+
+/**
+ * @fn int RTC_is_new_alarm_good(RTC_HandleTypeDef*, struct RTC_AlarmSet_t*)
+ * @param hrtc
+ * @param NewAlarm
+ * @return RTC_OK if new alarm is later than time now
+ */
+int
+RTC_is_new_alarm_good(RTC_HandleTypeDef *hrtc, struct RTC_AlarmSet_t *NewAlarm)
+{
+	RTC_TimeTypeDef sTime = {0};
+	HAL_RTC_GetTime(hrtc, &sTime, RTC_FORMAT_BIN);
+	RTC_DateTypeDef sDate = {0};
+	HAL_RTC_GetDate(hrtc, &sDate, RTC_FORMAT_BIN);
+
+
+	RTC_AlarmSet_t timeNow; //now
+	timeNow.years = sDate.Year;
+	timeNow.months = sDate.Month;
+	timeNow.days = sDate.WeekDay;
+	timeNow.hours = sTime.Hours;
+	timeNow.minutes = sTime.Minutes;
+	timeNow.seconds = sTime.Seconds + 1; // add 1 second to avoid problems with setting wrong
+
+	if(RTC_is_alarm_later(&timeNow, NewAlarm) == LATER)
+	{
+		return RTC_OK;
+	}
+	return MESSAGE_VALUE_ERROR;
+}
+
+/**
+ * Adds new alarm to AlarmArray
  * @param AlarmsArray passing AlarmsArray to change
  * @param Message message from uart
- * @return
+ * @return	RTC_NO_MESSAGE if message does not exist
+ * 			RTC_ALARM_ARRAY_MISSING if AlarmArray pointer is missing
+ * 			ALARM_LIMIT_ACCRUED if AlarmArray is missing
+ * 			MESSAGE_VALUE_ERROR if message have bad values
+ * 			MEMORY_ALLOCATION_ERROR if there is no more space to allocate
+ * 			NEW_ALARM_ERROR if new alarm is earlier than time now
+ * 			RTC_OK if success
  */
-int	RTC_Alarm_Update(struct RTC_AlarmSet_t *AlarmsArray,
+int	
+RTC_add_new_alarm(struct RTC_AlarmSet_t *AlarmsArray,
 		const uint8_t *Message)
 {
 	if(Message == NULL)
@@ -139,88 +273,74 @@ int	RTC_Alarm_Update(struct RTC_AlarmSet_t *AlarmsArray,
 	{
 		return RTC_ALARM_ARRAY_MISSING;
 	}
+	if(RTC_is_alarmArray_limit(AlarmsArray) >= ARRAY_SIZE_LIMIT)
+	{
+		return ALARM_LIMIT_ACCRUED;
+	}
 
 	struct RTC_AlarmSet_t *CurrAlarm;
 	CurrAlarm = AlarmsArray;
-	struct RTC_AlarmSet_t *Alarm, parsedData;
-	if((Alarm = (struct RTC_AlarmSet_t *) \
-				malloc(sizeof(struct RTC_AlarmSet_t))) == NULL)
-	{
-		return MEMORY_ALLOCATION_ERROR;
-	}
-	parsedData = RTC_ParseMessage_NewAlarm(Message);
-
+	struct RTC_AlarmSet_t *NewAlarm, parsedData;
+	
+	parsedData = RTC_parseMessage_NewAlarm(Message);
+	
 	if(parsedData.seconds == -1)
 	{
 		return MESSAGE_VALUE_ERROR;
 	}
-	Alarm->seconds 	= parsedData.seconds;
-	Alarm->minutes 	= parsedData.minutes;
-	Alarm->hours 	= parsedData.hours;
-	Alarm->days 	= parsedData.days;
-	Alarm->months 	= parsedData.months;
-	Alarm->years 	= parsedData.years;
-	Alarm->NextAlarm 	= NULL;
-
-	while(CurrAlarm->NextAlarm != NULL)
-	{
-		if(Alarm->years > CurrAlarm->years){
-			;
-		}else{
-			if(Alarm->months > CurrAlarm->months)
-			{
-				;
-			}else{
-				if(Alarm->days > CurrAlarm->days)
-				{
-					;
-				}else{
-					if(Alarm->hours > CurrAlarm->hours)
-					{
-						;
-					}else{
-						if(Alarm->hours > CurrAlarm->hours)
-						{
-							;
-						}else{
-							if(Alarm->minutes > CurrAlarm->minutes)
-							{
-								;
-							}else{
-								if(Alarm->seconds > CurrAlarm->seconds)
-								{
-									;
-								}
-								else{
-									break;
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-		CurrAlarm = CurrAlarm->NextAlarm;
-	}
-	if((AlarmsArray = (struct RTC_AlarmSet_t *) \
-			malloc(sizeof(struct RTC_AlarmSet_t))) == NULL)
+	if((NewAlarm = (struct RTC_AlarmSet_t *) \
+				malloc(sizeof(struct RTC_AlarmSet_t))) == NULL)
 	{
 		return MEMORY_ALLOCATION_ERROR;
 	}
+	NewAlarm->seconds 	= parsedData.seconds;
+	NewAlarm->minutes 	= parsedData.minutes;
+	NewAlarm->hours 	= parsedData.hours;
+	NewAlarm->days 		= parsedData.days;
+	NewAlarm->months 	= parsedData.months;
+	NewAlarm->years 	= parsedData.years;
+	NewAlarm->NextAlarm = NULL;
 
-	Alarm->NextAlarm 		= CurrAlarm->NextAlarm;
-	CurrAlarm->NextAlarm 	= Alarm;
 
-	free(Alarm);
+	uint8_t isNewAlarmEarlier = 0;
+	isNewAlarmEarlier = RTC_is_alarm_later(NewAlarm, CurrAlarm);
+	if(RTC_is_new_alarm_good(&hrtc, NewAlarm) == EARLIER)
+	{
+		return NEW_ALARM_ERROR;
+	}
+	if(isNewAlarmEarlier == EARLIER)
+	{
+		RTC_FLAG = RTC_SET_ALARM;
+		return RTC_OK;
+	}
+	while(CurrAlarm->NextAlarm != NULL)
+	{
+		if(RTC_is_alarm_later(NewAlarm, CurrAlarm) == EARLIER)
+				break;
+
+		CurrAlarm = CurrAlarm->NextAlarm;
+	}
+
+
+	NewAlarm->NextAlarm 	= CurrAlarm->NextAlarm;
+	CurrAlarm->NextAlarm 	= NewAlarm;
 
 	return RTC_OK;
 }
 
-int RTC_Alarm_Next(struct RTC_AlarmSet_t *AlarmsArray)
+
+/**
+ * @fn int RTC_get_next_alarm(struct RTC_AlarmSet_t*)
+ * @param AlarmsArray
+ * @return 	NO_MORE_ALARMS if now more alarms is in AlarmArray
+ * 			RTC_OK if success
+ */
+int 
+RTC_get_next_alarm(struct RTC_AlarmSet_t *AlarmsArray)
 {
-	if(AlarmsArray->NextAlarm == NULL)
+	if(AlarmsArray == NULL)
 	{
-		return NO_MORE_A_ALARMS;
+		return NO_MORE_ALARMS;
 	}
 	struct RTC_AlarmSet_t *NextAlarm;
 	NextAlarm = AlarmsArray->NextAlarm;
@@ -230,16 +350,50 @@ int RTC_Alarm_Next(struct RTC_AlarmSet_t *AlarmsArray)
 	return RTC_OK;
 }
 
-int RTC_Alarm_Reset(RTC_HandleTypeDef *hrtc,
-		struct RTC_AlarmSet_t *AlarmsArray, const uint8_t *Message)
-{
 
-	RTC_Alarm_Update(AlarmsArray, Message);
-	if(RTC_Alarm_Next(AlarmsArray))
+/**
+ * @fn int RTC_delate_alarm(struct RTC_AlarmSet_t*)
+ * @param AlarmsArray
+ * @return
+ */
+int
+RTC_delate_alarm(struct RTC_AlarmSet_t *AlarmsArray)
+{
+	struct RTC_AlarmSet_t *NextAlarm;
+
+	if(AlarmsArray->NextAlarm == NULL)
+		return NO_MORE_ALARMS;
+
+	NextAlarm = AlarmsArray;
+	AlarmsArray = AlarmsArray->NextAlarm;
+	free(NextAlarm);
+
+	return RTC_OK;
+}
+
+//TODO: make a function to delete specific alarm from array
+
+/**
+ * Set next alarm into Interrupt handler
+ *
+ * @fn int RTC_alarm_reset(RTC_HandleTypeDef*, struct RTC_AlarmSet_t*)
+ * @param hrtc
+ * @param AlarmsArray
+ * @return	NO_MORE_ALARMS if no more alarms exist
+ * 			ALARM_SET_IT_ERROR if HAL_RTC_SetAlarm_IT error occurred
+ * 			MISSING_ALARM if AlarmArray is missing
+ * 			RTC_OK if everything is good
+ */
+int 
+RTC_alarm_reset(RTC_HandleTypeDef *hrtc,
+		struct RTC_AlarmSet_t *AlarmsArray)
+{
+	if(RTC_get_next_alarm(AlarmsArray) == NO_MORE_ALARMS)
 	{
-		return NO_MORE_A_ALARMS;
+		return NO_MORE_ALARMS;
 	}
-	RTC_AlarmTypeDef sAlarm = {0};
+	CurrentAlarm = *AlarmsArray;
+	static RTC_AlarmTypeDef sAlarm = {0};
 	sAlarm.AlarmTime.Hours 		= AlarmsArray->hours;
 	sAlarm.AlarmTime.Minutes 	= AlarmsArray->minutes;
 	sAlarm.AlarmTime.Seconds 	= AlarmsArray->seconds;
@@ -257,13 +411,20 @@ int RTC_Alarm_Reset(RTC_HandleTypeDef *hrtc,
 	{
 		return ALARM_SET_IT_ERROR;
 	}
+	if (RTC_delate_alarm(AlarmsArray) != RTC_OK)
+	{
+		return MISSING_ALARM;
+	}
+
 
 	RTC_FLAG = RTC_SLEEP;
 
 	return RTC_OK;
 }
 
-void HAL_RTC_AlarmAEventCallback(RTC_HandleTypeDef *hrtc)
+/// Change HAL callback
+void
+HAL_RTC_AlarmAEventCallback(RTC_HandleTypeDef *hrtc)
 {
 	HAL_GPIO_TogglePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin);
 
@@ -273,20 +434,20 @@ void HAL_RTC_AlarmAEventCallback(RTC_HandleTypeDef *hrtc)
 }
 
 
-/*
+/**
  * !Water pouring section
  */
 
-//Values for HX711
-uint16_t TargetWaterWeight = 100;
-uint16_t Weight, OldWeight;
-uint8_t  WeightTimeOut = 5;
+/// Values for HX711
+uint16_t TargetWaterWeight = 100; 	/// target weight can be changed
+static uint16_t Weight, OldWeight;	/// Measuring purpose values
+static uint8_t  WeightTimeOut = 5;	/// how many times can measured weight not change
 
 /**
  *
  * @return		successful status
  */
-int RTC_Water()
+int RTC_water()
 {
 	/**
 	 * TODO: HX711_Weight()
@@ -298,7 +459,7 @@ int RTC_Water()
 	 * TODO: StopPouringWater()
 	 * 		Stop pouring water
 	 */
-	Weight = HX711_Weight();
+	///Weight = HX711_Weight();
 	if(Weight < TargetWaterWeight)
 	{
 		if(Weight <= OldWeight + MEASURE_WEIGHT_DRIFT)
@@ -312,18 +473,20 @@ int RTC_Water()
 			RTC_FLAG = RTC_NO_WATER;
 			return RTC_NO_WATER;
 		}
-		StartPouringWater();
+		///StartPouringWater();
 		RTC_FLAG = RTC_WATER;
 		//Continue pouring water
 		return RTC_WATER;
 	}
 	else
 	{
-		StopPouringWater();
-		RTC_FLAG = RTC_NEW_ALARM;
-		return RTC_NEW_ALARM;
+		///StopPouringWater();
+		RTC_FLAG = RTC_SET_ALARM;
+		return RTC_SET_ALARM;
 	}
 }
+
+
 /**
  * @fn int RTC_Main(RTC_HandleTypeDef*, struct RTC_AlarmSet_t*, const uint8_t*)
  * @param hrtc
@@ -331,20 +494,22 @@ int RTC_Water()
  * @param Message
  * @return
  */
-int RTC_Main(RTC_HandleTypeDef *hrtc, struct RTC_AlarmSet_t *AlarmsArray,
+int
+RTC_Main(RTC_HandleTypeDef *hrtc, struct RTC_AlarmSet_t *AlarmsArray,
 		const uint8_t *Message)
 {
-	/*!
-	 * TODO interpret of RTC_FLAG
-	 */
+	//TODO check battery level
 
 	switch(RTC_FLAG)
 	{
-		case RTC_NEW_ALARM:
-			RTC_Alarm_Reset(hrtc, AlarmsArray, Message);
+		case RTC_SET_ALARM:
+			RTC_alarm_reset(hrtc, AlarmsArray);
 			break;
 		case RTC_WATER:
-			RTC_Water();
+			RTC_water();
+			break;
+		case RTC_NEW_ALARM:
+			RTC_add_new_alarm(AlarmsArray, Message);
 			break;
 		default:
 			break;
