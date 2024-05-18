@@ -16,10 +16,10 @@
  * RTC Alarm section
  */
 
-uint8_t RTC_FLAG = RTC_SLEEP;				/// flag for RTC state machine
+int rtc_flag = RTC_SLEEP;				/// flag for RTC state machine
 
 // creating a alarms first element
-//struct RTC_AlarmSet_t *AlarmsArray;			/// main pointer
+struct RTC_AlarmSet_t *AlarmsArray;			/// main pointer
 static struct RTC_AlarmSet_t CurrentAlarm;	/// value for functions
 
 
@@ -32,7 +32,7 @@ static struct RTC_AlarmSet_t CurrentAlarm;	/// value for functions
  * @return 		successful status
  */
 int 
-RTC_Init(RTC_HandleTypeDef *hrtc, struct RTC_AlarmSet_t *AlarmsArray)
+RTC_Init(RTC_HandleTypeDef *hrtc, struct RTC_AlarmSet_t **AlarmsArray)
 {
 	//TODO: RTC init from cube mx
 
@@ -53,7 +53,7 @@ RTC_Init(RTC_HandleTypeDef *hrtc, struct RTC_AlarmSet_t *AlarmsArray)
 	NewAlarm->years 	= 0;
 	NewAlarm->NextAlarm = NULL;
 
-	AlarmsArray = NewAlarm;
+	*AlarmsArray = NewAlarm;
 
 	return RTC_OK;
 }
@@ -65,10 +65,10 @@ RTC_Init(RTC_HandleTypeDef *hrtc, struct RTC_AlarmSet_t *AlarmsArray)
  * @return size of AlarmArray
  */
 int
-RTC_is_alarmArray_limit(struct RTC_AlarmSet_t *AlarmsArray)
+RTC_is_alarmArray_limit(struct RTC_AlarmSet_t **AlarmsArray)
 {
 	uint16_t sizeCounter = 0;
-	RTC_AlarmSet_t *currAlarm = AlarmsArray;
+	RTC_AlarmSet_t *currAlarm = *AlarmsArray;
 	
 	do
 	{
@@ -78,7 +78,7 @@ RTC_is_alarmArray_limit(struct RTC_AlarmSet_t *AlarmsArray)
 	while(currAlarm != NULL);
 	
 	if(sizeCounter == 0)
-		return MISSING_ALARM;
+		return MISSING_ALARM_ARRAY;
 	
 	return sizeCounter;
 }
@@ -262,14 +262,14 @@ RTC_is_new_alarm_good(RTC_HandleTypeDef *hrtc, struct RTC_AlarmSet_t *NewAlarm)
  * 			RTC_OK if success
  */
 int	
-RTC_add_new_alarm(struct RTC_AlarmSet_t *AlarmsArray,
+RTC_add_new_alarm(struct RTC_AlarmSet_t **AlarmsArray,
 		const uint8_t *Message)
 {
 	if(Message == NULL)
 	{
 		return RTC_NO_MESSAGE;
 	}
-	if(AlarmsArray == NULL)
+	if(*AlarmsArray == NULL)
 	{
 		return RTC_ALARM_ARRAY_MISSING;
 	}
@@ -279,7 +279,7 @@ RTC_add_new_alarm(struct RTC_AlarmSet_t *AlarmsArray,
 	}
 
 	struct RTC_AlarmSet_t *CurrAlarm;
-	CurrAlarm = AlarmsArray;
+	CurrAlarm = *AlarmsArray;
 	struct RTC_AlarmSet_t *NewAlarm, parsedData;
 	
 	parsedData = RTC_parseMessage_NewAlarm(Message);
@@ -310,7 +310,7 @@ RTC_add_new_alarm(struct RTC_AlarmSet_t *AlarmsArray,
 	}
 	if(isNewAlarmEarlier == EARLIER)
 	{
-		RTC_FLAG = RTC_SET_ALARM;
+		rtc_flag = RTC_SET_ALARM;
 		return RTC_OK;
 	}
 	while(CurrAlarm->NextAlarm != NULL)
@@ -336,16 +336,20 @@ RTC_add_new_alarm(struct RTC_AlarmSet_t *AlarmsArray,
  * 			RTC_OK if success
  */
 int 
-RTC_get_next_alarm(struct RTC_AlarmSet_t *AlarmsArray)
+RTC_get_next_alarm(struct RTC_AlarmSet_t **AlarmsArray)
 {
-	if(AlarmsArray == NULL)
+	if(*AlarmsArray == NULL)
+	{
+		return MISSING_ALARM_ARRAY;
+	}
+	if((*AlarmsArray)->NextAlarm == NULL)
 	{
 		return NO_MORE_ALARMS;
 	}
 	struct RTC_AlarmSet_t *NextAlarm;
-	NextAlarm = AlarmsArray->NextAlarm;
-	free(AlarmsArray);
-	AlarmsArray = NextAlarm;
+	NextAlarm = (*AlarmsArray)->NextAlarm;
+	free(*AlarmsArray);
+	*AlarmsArray = NextAlarm;
 
 	return RTC_OK;
 }
@@ -357,15 +361,15 @@ RTC_get_next_alarm(struct RTC_AlarmSet_t *AlarmsArray)
  * @return
  */
 int
-RTC_delate_alarm(struct RTC_AlarmSet_t *AlarmsArray)
+RTC_delate_alarm(struct RTC_AlarmSet_t **AlarmsArray)
 {
 	struct RTC_AlarmSet_t *NextAlarm;
 
-	if(AlarmsArray->NextAlarm == NULL)
+	if((*AlarmsArray)->NextAlarm == NULL)
 		return NO_MORE_ALARMS;
 
-	NextAlarm = AlarmsArray;
-	AlarmsArray = AlarmsArray->NextAlarm;
+	NextAlarm = *AlarmsArray;
+	*AlarmsArray = (*AlarmsArray)->NextAlarm;
 	free(NextAlarm);
 
 	return RTC_OK;
@@ -381,22 +385,22 @@ RTC_delate_alarm(struct RTC_AlarmSet_t *AlarmsArray)
  * @param AlarmsArray
  * @return	NO_MORE_ALARMS if no more alarms exist
  * 			ALARM_SET_IT_ERROR if HAL_RTC_SetAlarm_IT error occurred
- * 			MISSING_ALARM if AlarmArray is missing
+ * 			MISSING_ALARM_ARRAY if AlarmArray is missing
  * 			RTC_OK if everything is good
  */
 int 
 RTC_alarm_reset(RTC_HandleTypeDef *hrtc,
-		struct RTC_AlarmSet_t *AlarmsArray)
+		struct RTC_AlarmSet_t **AlarmsArray)
 {
 	if(RTC_get_next_alarm(AlarmsArray) == NO_MORE_ALARMS)
 	{
 		return NO_MORE_ALARMS;
 	}
-	CurrentAlarm = *AlarmsArray;
+	CurrentAlarm = **AlarmsArray;
 	static RTC_AlarmTypeDef sAlarm = {0};
-	sAlarm.AlarmTime.Hours 		= AlarmsArray->hours;
-	sAlarm.AlarmTime.Minutes 	= AlarmsArray->minutes;
-	sAlarm.AlarmTime.Seconds 	= AlarmsArray->seconds;
+	sAlarm.AlarmTime.Hours 		= (*AlarmsArray)->hours;
+	sAlarm.AlarmTime.Minutes 	= (*AlarmsArray)->minutes;
+	sAlarm.AlarmTime.Seconds 	= (*AlarmsArray)->seconds;
 	sAlarm.AlarmTime.SubSeconds = 0;
 	sAlarm.AlarmMask =
 			RTC_ALARMMASK_DATEWEEKDAY|RTC_ALARMMASK_HOURS
@@ -405,7 +409,7 @@ RTC_alarm_reset(RTC_HandleTypeDef *hrtc,
 
 	sAlarm.AlarmSubSecondMask 	= RTC_ALARMSUBSECONDMASK_ALL;
 	sAlarm.AlarmDateWeekDaySel 	= RTC_ALARMDATEWEEKDAYSEL_DATE;
-	sAlarm.AlarmDateWeekDay 	= AlarmsArray->days;
+	sAlarm.AlarmDateWeekDay 	= (*AlarmsArray)->days;
 	sAlarm.Alarm = RTC_ALARM_A;
 	if (HAL_RTC_SetAlarm_IT(hrtc, &sAlarm, RTC_FORMAT_BIN) != HAL_OK)
 	{
@@ -413,11 +417,11 @@ RTC_alarm_reset(RTC_HandleTypeDef *hrtc,
 	}
 	if (RTC_delate_alarm(AlarmsArray) != RTC_OK)
 	{
-		return MISSING_ALARM;
+		return MISSING_ALARM_ARRAY;
 	}
 
 
-	RTC_FLAG = RTC_SLEEP;
+	rtc_flag = RTC_SLEEP;
 
 	return RTC_OK;
 }
@@ -430,7 +434,7 @@ HAL_RTC_AlarmAEventCallback(RTC_HandleTypeDef *hrtc)
 
 	///TODO add debug printf
 
-	RTC_FLAG = RTC_WATER;
+	rtc_flag = RTC_WATER;
 }
 
 
@@ -460,6 +464,8 @@ int RTC_water()
 	 * 		Stop pouring water
 	 */
 	///Weight = HX711_Weight();
+	Weight = 10;
+	TargetWaterWeight = 10;
 	if(Weight < TargetWaterWeight)
 	{
 		if(Weight <= OldWeight + MEASURE_WEIGHT_DRIFT)
@@ -470,18 +476,18 @@ int RTC_water()
 		}
 		if(WeightTimeOut == 0)
 		{
-			RTC_FLAG = RTC_NO_WATER;
+			rtc_flag = RTC_NO_WATER;
 			return RTC_NO_WATER;
 		}
 		///StartPouringWater();
-		RTC_FLAG = RTC_WATER;
+		rtc_flag = RTC_WATER;
 		//Continue pouring water
 		return RTC_WATER;
 	}
 	else
 	{
 		///StopPouringWater();
-		RTC_FLAG = RTC_SET_ALARM;
+		rtc_flag = RTC_SET_ALARM;
 		return RTC_SET_ALARM;
 	}
 }
@@ -495,12 +501,12 @@ int RTC_water()
  * @return
  */
 int
-RTC_Main(RTC_HandleTypeDef *hrtc, struct RTC_AlarmSet_t *AlarmsArray,
+RTC_Main(RTC_HandleTypeDef *hrtc, struct RTC_AlarmSet_t **AlarmsArray,
 		const uint8_t *Message)
 {
 	//TODO check battery level
 
-	switch(RTC_FLAG)
+	switch(rtc_flag)
 	{
 		case RTC_SET_ALARM:
 			RTC_alarm_reset(hrtc, AlarmsArray);
