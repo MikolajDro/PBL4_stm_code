@@ -48,7 +48,7 @@ enum RTC_LOG{
 	RTC_NO_MESSAGE			= 6,
 	MESSAGE_VALUE_ERROR		= 7,
 	RTC_ALARM_ARRAY_MISSING	= 8,
-	MISSING_ALARM			= 9,
+	MISSING_ALARM_ARRAY			= 9,
 	ALARM_LIMIT_ACCRUED		= 10,
 	NEW_ALARM_ERROR			= 11, // new alarm earlier then time now
 
@@ -56,8 +56,8 @@ enum RTC_LOG{
 
 extern RTC_HandleTypeDef hrtc;
 extern uint16_t TargetWaterWeight;
-extern uint8_t RTC_FLAG;
-//extern struct RTC_AlarmSet_t *AlarmsArray;
+extern int rtc_flag;
+extern struct RTC_AlarmSet_t *AlarmsArray;
 
 /**
  * @fn int RTC_Init(RTC_HandleTypeDef*, struct RTC_AlarmSet_t*)
@@ -65,7 +65,7 @@ extern uint8_t RTC_FLAG;
  * @param AlarmsArray
  * @return RTC_LOG status
  */
-int RTC_Init(RTC_HandleTypeDef *hrtc, struct RTC_AlarmSet_t *AlarmsArray);
+int RTC_Init(RTC_HandleTypeDef *hrtc, struct RTC_AlarmSet_t **AlarmsArray);
 
 /**
  * @fn void HAL_RTC_AlarmAEventCallback(RTC_HandleTypeDef*)
@@ -75,7 +75,7 @@ int RTC_Init(RTC_HandleTypeDef *hrtc, struct RTC_AlarmSet_t *AlarmsArray);
  */
 void HAL_RTC_AlarmAEventCallback(RTC_HandleTypeDef *hrtc);
 
-int RTC_Main(RTC_HandleTypeDef *hrtc, struct RTC_AlarmSet_t *AlarmsArray,
+int RTC_Main(RTC_HandleTypeDef *hrtc, struct RTC_AlarmSet_t **AlarmsArray,
 		const uint8_t *Message);
 
 #endif /* INC_RTC_ALARMA_H_ */
