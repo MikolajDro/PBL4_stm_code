@@ -21,8 +21,8 @@
 #define START_TIMER		1
 #define STOP_TIMER		0
 #define TOGGLE_PERIOD	200	// period of time to toggle led while button is pressed
-#define PRESSED			GPIO_PIN_SET
-#define RELEASED		GPIO_PIN_RESET
+#define PRESSED			GPIO_PIN_RESET
+#define RELEASED		GPIO_PIN_SET
 #define IDLE			RELEASED
 #define BAT_CHECK		1000			// press max 1s to check battery state
 #define WIFI_CONNECTION	5000			// press between 1 - 5 seconds
@@ -56,6 +56,7 @@ enum BUTTON_STATE{
 
 // values defines
 extern int button_flag;
+extern uint32_t button_time;
 
 // HAL function defines
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin);
